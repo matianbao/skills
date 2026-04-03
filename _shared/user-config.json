@@ -1,0 +1,92 @@
+{
+  "paths": {
+    "obsidian_vault": "/Users/lipma/Documents/Obsidian Vault",
+    "paper_notes_folder": "论文笔记",
+    "daily_papers_folder": "DailyPapers",
+    "concepts_folder": "_概念",
+    "zotero_db": "~/Zotero/zotero.sqlite",
+    "zotero_storage": "~/Zotero/storage"
+  },
+  "daily_papers": {
+    "keywords": [
+      "recommendation system",
+      "recommendation model",
+      "generative recommendation",
+      "generative retrieval",
+      "collaborative filtering",
+      "click-through rate",
+      "CTR prediction",
+      "conversion rate",
+      "user modeling",
+      "ranking model",
+      "ad delivery",
+      "ad serving",
+      "computational advertising",
+      "ad targeting",
+      "ad bidding",
+      "scaling law",
+      "large language model",
+      "LLM",
+      "multi-agent",
+      "agentic",
+      "tool use",
+      "function calling",
+      "multimodal generation",
+      "reinforcement learning"
+    ],
+    "negative_keywords": [
+      "medical imaging",
+      "weather forecast",
+      "climate",
+      "pet restoration",
+      "mri",
+      "ct scan",
+      "pathology",
+      "diagnosis",
+      "protein",
+      "drug discovery",
+      "molecular",
+      "audio generation",
+      "music generation",
+      "speech synthesis",
+      "text-to-speech",
+      "speech recognition",
+      "voice cloning",
+      "robot",
+      "embodied",
+      "locomotion",
+      "grasping",
+      "manipulation",
+      "autonomous driving",
+      "self-driving"
+    ],
+    "domain_boost_keywords": [
+      "item retrieval",
+      "auction mechanism",
+      "budget optimization",
+      "agent planning",
+      "agent memory",
+      "agent reasoning",
+      "ReAct",
+      "chain of thought",
+      "code generation",
+      "tool calling"
+    ],
+    "arxiv_categories": ["cs.RO", "cs.CV", "cs.AI", "cs.LG"],
+    "min_score": 2,
+    "top_n": 30
+  },
+  "notes": {
+    "auto_generate": false
+  },
+  "web": {
+    "enabled": true,
+    "github_pages_repo": "~/daily-papers-site",
+    "output_dir": "daily-papers"
+  },
+  "automation": {
+    "auto_refresh_indexes": true,
+    "git_commit": false,
+    "git_push": false
+  }
+}
