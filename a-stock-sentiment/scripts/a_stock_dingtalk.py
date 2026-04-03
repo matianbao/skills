@@ -259,13 +259,13 @@ def collect_data():
                 for _c in reversed(_changes):
                     if _c > 0: _streak += 1
                     else: break
-                _trend5 = ''.join(['↑' if c > 0 else '↓' for c in _changes[-5:]])
-                print(f"    {_name}: 累计{_total:+.1f}% | 近5日:{_trend5} | 连涨{_streak}天")
+                _day_strs = [f"\033[31m{c:+.1f}%\033[0m" if c > 0 else f"\033[32m{c:+.1f}%\033[0m" for c in _changes[-5:]]
+                print(f"    {_name}: 累计{_total:+.1f}% | 近5日: {' '.join(_day_strs)} | 连涨{_streak}天")
             print("  累计领跌 TOP5:")
             for _name, _changes in _ranked[-5:]:
                 _total = sum(_changes)
-                _trend5 = ''.join(['↑' if c > 0 else '↓' for c in _changes[-5:]])
-                print(f"    {_name}: 累计{_total:+.1f}% | 近5日:{_trend5}")
+                _day_strs = [f"\033[31m{c:+.1f}%\033[0m" if c > 0 else f"\033[32m{c:+.1f}%\033[0m" for c in _changes[-5:]]
+                print(f"    {_name}: 累计{_total:+.1f}% | 近5日: {' '.join(_day_strs)}")
         else:
             print("  ❌ 板块K线解析失败")
     else:
@@ -364,13 +364,13 @@ def build_report(d):
             for c in reversed(changes):
                 if c > 0: streak += 1
                 else: break
-            trend5 = ''.join(['↑' if c > 0 else '↓' for c in changes[-5:]])
-            lines.append(f"- {name} {total_chg:+.1f}% | {trend5} | 连涨{streak}天")
+            day_strs = [f'<font color="#FF0000">{c:+.1f}%</font>' if c > 0 else f'<font color="#00AA00">{c:+.1f}%</font>' for c in changes[-5:]]
+            lines.append(f"- **{name}** {total_chg:+.1f}% | {' '.join(day_strs)} | 连涨{streak}天")
         lines.append("\n**累计领跌 TOP5:**")
         for name, changes in ranked[-5:]:
             total_chg = sum(changes)
-            trend5 = ''.join(['↑' if c > 0 else '↓' for c in changes[-5:]])
-            lines.append(f"- {name} {total_chg:+.1f}% | {trend5}")
+            day_strs = [f'<font color="#FF0000">{c:+.1f}%</font>' if c > 0 else f'<font color="#00AA00">{c:+.1f}%</font>' for c in changes[-5:]]
+            lines.append(f"- **{name}** {total_chg:+.1f}% | {' '.join(day_strs)}")
 
     lines.append("\n---")
     lines.append("> 免责声明: 以上基于公开数据自动生成，不构成投资建议。")
