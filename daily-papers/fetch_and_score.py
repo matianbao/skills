@@ -158,7 +158,7 @@ def _parse_hf_item(item: dict, source: str) -> tuple[str, dict] | None:
     return arxiv_id, paper
 
 
-def fetch_hf_papers(start_date=None, end_date=None) -> list[dict]:
+def fetch_hf_papers(start_date=None, end_date=None, backfill: bool = False) -> list[dict]:
     papers = {}  # arxiv_id → paper
 
     # ── hf-daily: loop each day in range ──
@@ -200,29 +200,32 @@ def fetch_hf_papers(start_date=None, end_date=None) -> list[dict]:
                     if arxiv_id not in papers or paper["score"] > papers[arxiv_id]["score"]:
                         papers[arxiv_id] = paper
 
-    # ── hf-trending: always single call (not date-dependent) ──
-    endpoint = "https://huggingface.co/api/daily_papers?sort=trending&limit=50"
-    print(f"  Fetching hf-trending...", file=sys.stderr)
-    raw = fetch_url(endpoint)
-    if raw:
-        try:
-            items = json.loads(raw)
-        except json.JSONDecodeError:
-            items = []
-            print(f"  [WARN] bad JSON from hf-trending", file=sys.stderr)
-        for item in items:
-            result = _parse_hf_item(item, "hf-trending")
-            if result:
-                arxiv_id, paper = result
-                if arxiv_id not in papers or paper["score"] > papers[arxiv_id]["score"]:
-                    papers[arxiv_id] = paper
+    # ── hf-trending: skip in backfill mode (returns current data, not historical) ──
+    if backfill:
+        print(f"  Skipping hf-trending (backfill mode)", file=sys.stderr)
+    else:
+        endpoint = "https://huggingface.co/api/daily_papers?sort=trending&limit=50"
+        print(f"  Fetching hf-trending...", file=sys.stderr)
+        raw = fetch_url(endpoint)
+        if raw:
+            try:
+                items = json.loads(raw)
+            except json.JSONDecodeError:
+                items = []
+                print(f"  [WARN] bad JSON from hf-trending", file=sys.stderr)
+            for item in items:
+                result = _parse_hf_item(item, "hf-trending")
+                if result:
+                    arxiv_id, paper = result
+                    if arxiv_id not in papers or paper["score"] > papers[arxiv_id]["score"]:
+                        papers[arxiv_id] = paper
 
     result = list(papers.values())
     print(f"  HF: {len(result)} papers after scoring", file=sys.stderr)
     return result
 
 
-def fetch_arxiv_papers(start_date=None, end_date=None, days: int = 1) -> list[dict]:
+def fetch_arxiv_papers(start_date=None, end_date=None, days: int = 1, backfill: bool = False) -> list[dict]:
     max_results = min(400 * days, 3000)
     cats = "+OR+".join(f"cat:{c}" for c in ARXIV_CATEGORIES)
     url = (
@@ -260,9 +263,11 @@ def fetch_arxiv_papers(start_date=None, end_date=None, days: int = 1) -> list[di
         date = published_el.text[:10] if published_el is not None else ""
         arxiv_id = entry_url.split("/abs/")[-1] if "/abs/" in entry_url else ""
 
-        # Date filter: only apply in multi-day mode (days > 1)
-        # In single-day mode, arXiv batches span 2-3 days, so filtering would be too strict
-        if days > 1 and start_date and end_date and date:
+        # Date filter:
+        # - backfill mode: strict filter to target date range only
+        # - multi-day mode (days > 1): filter to date range
+        # - single-day today mode: no filter (arXiv batches span 2-3 days)
+        if (backfill or days > 1) and start_date and end_date and date:
             try:
                 pub_date = datetime.strptime(date, "%Y-%m-%d").date()
                 if pub_date < start_date or pub_date > end_date:
@@ -435,6 +440,36 @@ def merge_and_dedup(
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
+def run(target_date=None, days: int = 1) -> list[dict]:
+    """Core logic: fetch, score, merge, dedup. Returns list of top papers.
+
+    Args:
+        target_date: datetime.date object (default: today)
+        days: number of days to fetch (default: 1)
+    """
+    if target_date is None:
+        target_date = datetime.now().date()
+    days = max(1, days)
+    start_date = target_date - timedelta(days=days - 1)
+    top_n = TOP_N * days
+
+    # Backfill mode: target_date is strictly in the past
+    today = datetime.now().date()
+    backfill = target_date < today
+
+    is_weekend = target_date.weekday() >= 5
+    mode_str = "backfill" if backfill else ("weekend" if is_weekend else "weekday")
+    print(
+        f"[fetch_and_score] {target_date} ({mode_str})"
+        + (f", days={days} [{start_date} ~ {target_date}], top_n={top_n}" if days > 1 else ""),
+        file=sys.stderr,
+    )
+
+    hf_papers = fetch_hf_papers(start_date, target_date, backfill=backfill)
+    arxiv_papers = fetch_arxiv_papers(start_date, target_date, days, backfill=backfill)
+    return merge_and_dedup(hf_papers, arxiv_papers, target_date, days=days, top_n=top_n)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", help="Target date YYYY-MM-DD (default: today)")
@@ -444,22 +479,9 @@ def main():
     target_date = (
         datetime.strptime(args.date, "%Y-%m-%d").date()
         if args.date
-        else datetime.now().date()
+        else None
     )
-    days = max(1, args.days)
-    start_date = target_date - timedelta(days=days - 1)
-    top_n = TOP_N * days
-
-    is_weekend = target_date.weekday() >= 5
-    print(
-        f"[fetch_and_score] {target_date} ({'weekend' if is_weekend else 'weekday'})"
-        + (f", days={days} [{start_date} ~ {target_date}], top_n={top_n}" if days > 1 else ""),
-        file=sys.stderr,
-    )
-
-    hf_papers = fetch_hf_papers(start_date, target_date)
-    arxiv_papers = fetch_arxiv_papers(start_date, target_date, days)
-    top = merge_and_dedup(hf_papers, arxiv_papers, target_date, days=days, top_n=top_n)
+    top = run(target_date=target_date, days=args.days)
 
     # Output to stdout (UTF-8 encoded for Windows compatibility)
     import io

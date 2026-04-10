@@ -132,23 +132,99 @@ def strip_tags(html: str) -> str:
     return re.sub(r"<[^>]+>", "", html)
 
 
-def extract_figure_url(html: str, arxiv_id: str) -> str:
-    """Extract the first non-icon figure image URL from HTML."""
-    figures = re.findall(r"<figure[^>]*>.*?<img[^>]+src=[\"']([^\"'>]+)[\"']", html, re.DOTALL)
-    skip_words = ["icon", "logo", "badge", "inline", "orcid", "creative"]
-    for fig in figures:
-        if any(skip in fig.lower() for skip in skip_words):
+def _normalize_figure_url(src: str, arxiv_id: str) -> str:
+    """Normalize a figure image src to a full URL."""
+    if src.startswith("/"):
+        return "https://arxiv.org" + src
+    if not src.startswith("http"):
+        if re.match(r"\d{4}\.\d{4,5}v\d+/", src):
+            return "https://arxiv.org/html/" + src
+        return f"https://arxiv.org/html/{arxiv_id}/" + src
+    return src
+
+
+# Keywords in captions that suggest a framework/architecture/overview figure
+_FRAMEWORK_HINTS = [
+    "overview", "framework", "architecture", "pipeline", "system",
+    "workflow", "approach", "method", "model", "proposed",
+    "illustrat", "diagram", "our ",
+]
+# Keywords for network detail / module-level figures
+_DETAIL_HINTS = [
+    "network", "module", "block", "layer", "encoder", "decoder",
+    "attention", "structure", "component", "detail", "design",
+    "unit", "cell", "branch", "backbone", "head",
+]
+_SKIP_FIGURE_WORDS = ["icon", "logo", "badge", "inline", "orcid", "creative"]
+# Skip figures that are pure results/charts (not architecture)
+_RESULTS_HINTS = [
+    "result", "comparison", "ablation", "performance", "accuracy",
+    "curve", "plot", "bar", "histogram", "qualitative", "visual",
+    "example", "sample", "case stud", "trade-off", "scaling",
+]
+
+MAX_FIGURES = 3
+
+
+def _parse_figure_candidates(html: str, arxiv_id: str) -> list[tuple[str, str, int]]:
+    """Parse all <figure> blocks, returning (url, caption, index) tuples."""
+    figure_blocks = re.findall(
+        r"<figure[^>]*>(.*?)</figure>", html, re.DOTALL
+    )
+    candidates = []
+    for i, block in enumerate(figure_blocks):
+        img_match = re.search(r"<img[^>]+src=[\"']([^\"'>]+)[\"']", block)
+        if not img_match:
             continue
-        url = fig
-        if url.startswith("/"):
-            url = "https://arxiv.org" + url
-        elif not url.startswith("http"):
-            if re.match(r"\d{4}\.\d{4,5}v\d+/", url):
-                url = "https://arxiv.org/html/" + url
-            else:
-                url = f"https://arxiv.org/html/{arxiv_id}/" + url
-        return url
-    return ""
+        src = img_match.group(1)
+        if any(skip in src.lower() for skip in _SKIP_FIGURE_WORDS):
+            continue
+        cap_match = re.search(r"<figcaption[^>]*>(.*?)</figcaption>", block, re.DOTALL)
+        caption = strip_tags(cap_match.group(1)).lower() if cap_match else ""
+        url = _normalize_figure_url(src, arxiv_id)
+        candidates.append((url, caption, i))
+    return candidates
+
+
+def extract_figure_url(html: str, arxiv_id: str) -> str:
+    """Extract the best figure image URL from HTML (backward compat)."""
+    urls = extract_figure_urls(html, arxiv_id)
+    return urls[0] if urls else ""
+
+
+def extract_figure_urls(html: str, arxiv_id: str) -> list[str]:
+    """Extract up to MAX_FIGURES figure URLs: framework first, then details.
+
+    Only includes figures whose captions match framework or detail keywords.
+    If no framework/detail figures are found, returns empty list (no fallback).
+    """
+    candidates = _parse_figure_candidates(html, arxiv_id)
+    if not candidates:
+        return []
+
+    framework = []
+    detail = []
+
+    for url, caption, idx in candidates:
+        is_result = any(h in caption for h in _RESULTS_HINTS)
+        is_framework = any(h in caption for h in _FRAMEWORK_HINTS)
+        is_detail = any(h in caption for h in _DETAIL_HINTS)
+
+        if is_framework and not is_result:
+            framework.append(url)
+        elif is_detail and not is_result:
+            detail.append(url)
+
+    selected = []
+    seen = set()
+    for url in framework + detail:
+        if url not in seen:
+            seen.add(url)
+            selected.append(url)
+        if len(selected) >= MAX_FIGURES:
+            break
+
+    return selected
 
 
 def extract_authors_html(html: str) -> list[str]:
@@ -391,6 +467,7 @@ async def enrich_one(paper: dict, sem: asyncio.Semaphore) -> dict:
         html_authors = []
         html_affiliations = []
         figure_url = ""
+        figure_urls = []
         section_headers = []
         captions = []
         has_real_world = False
@@ -399,6 +476,7 @@ async def enrich_one(paper: dict, sem: asyncio.Semaphore) -> dict:
 
         if html and len(html) > 1000:
             figure_url = extract_figure_url(html, arxiv_id)
+            figure_urls = extract_figure_urls(html, arxiv_id)
             html_authors = extract_authors_html(html)
             html_affiliations = extract_affiliations_html(html)
             section_headers = extract_section_headers(html)
@@ -426,8 +504,10 @@ async def enrich_one(paper: dict, sem: asyncio.Semaphore) -> dict:
         # ── Merge with priority rules ──
         # Principle: new extraction > existing input, but never overwrite non-empty with empty
 
-        # figure_url: HTML curl > keep existing
+        # figure_url: HTML curl > keep existing (backward compat)
         result["figure_url"] = figure_url or paper.get("figure_url", "")
+        # figure_urls: list of up to 3 figures (framework + detail)
+        result["figure_urls"] = figure_urls or paper.get("figure_urls", [])
 
         # affiliations: HTML > abs fallback > PDF fallback > keep existing input
         if html_affiliations:
@@ -479,6 +559,16 @@ async def enrich_all(papers: list[dict]) -> list[dict]:
             ordered.append(result)
 
     return ordered
+
+
+def run(papers: list[dict]) -> list[dict]:
+    """Core logic: enrich all papers concurrently. Returns enriched list."""
+    if not papers:
+        return []
+    print(f"Enriching {len(papers)} papers...", file=sys.stderr)
+    enriched = asyncio.run(enrich_all(papers))
+    print(f"Done. Enriched {len(enriched)} papers.", file=sys.stderr)
+    return enriched
 
 
 def main():

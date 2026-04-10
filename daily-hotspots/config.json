@@ -1,0 +1,58 @@
+{
+  "commodities": {
+    "原油_布伦特": {
+      "source": "akshare",
+      "func": "futures_foreign_hist",
+      "symbol": "B",
+      "exchange": "IPE",
+      "display": "布伦特原油"
+    },
+    "原油_WTI": {
+      "source": "akshare",
+      "func": "futures_foreign_hist",
+      "symbol": "CL",
+      "exchange": "NYMEX",
+      "display": "WTI原油"
+    },
+    "沪铜": {
+      "source": "akshare",
+      "func": "futures_zh_daily_sina",
+      "symbol": "CU0",
+      "display": "沪铜主力"
+    },
+    "沪铝": {
+      "source": "akshare",
+      "func": "futures_zh_daily_sina",
+      "symbol": "AL0",
+      "display": "沪铝主力"
+    },
+    "碳酸锂": {
+      "source": "akshare",
+      "func": "futures_zh_daily_sina",
+      "symbol": "LC0",
+      "display": "碳酸锂主力"
+    },
+    "螺纹钢": {
+      "source": "akshare",
+      "func": "futures_zh_daily_sina",
+      "symbol": "RB0",
+      "display": "螺纹钢主力"
+    },
+    "动力煤": {
+      "source": "akshare",
+      "func": "futures_zh_daily_sina",
+      "symbol": "ZC0",
+      "display": "动力煤主力"
+    },
+    "天然气": {
+      "source": "akshare",
+      "func": "futures_foreign_hist",
+      "symbol": "NG",
+      "exchange": "NYMEX",
+      "display": "天然气(Henry Hub)"
+    }
+  },
+  "news_sources": ["eastmoney", "cls"],
+  "sector_top_n": 10,
+  "output_path": "/tmp/daily_hotspots.json"
+}

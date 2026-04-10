@@ -84,6 +84,14 @@
     "github_pages_repo": "~/daily-papers-site",
     "output_dir": "daily-papers"
   },
+  "roundtable": {
+    "save_dir": "Roundtable",
+    "default_experts": 4,
+    "web": {
+      "enabled": true,
+      "output_dir": "roundtable"
+    }
+  },
   "automation": {
     "auto_refresh_indexes": true,
     "git_commit": false,

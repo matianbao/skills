@@ -163,14 +163,24 @@ def main():
     elif args.from_recommendation:
         entries = load_from_recommendation(args.from_recommendation)
     else:
-        # Auto-detect: try to load from default temp path
-        auto_enriched = temp_file_path('daily_papers_enriched.json')
-        if auto_enriched.exists():
+        # Auto-detect: try date-stamped file first, then fallback to generic
+        candidates = []
+        if args.date:
+            candidates.append(temp_file_path(f'daily_papers_{args.date}_enriched.json'))
+        candidates.append(temp_file_path('daily_papers_enriched.json'))
+
+        auto_enriched = None
+        for c in candidates:
+            if c.exists():
+                auto_enriched = c
+                break
+
+        if auto_enriched:
             print(f"[update_history] Auto-detected input: {auto_enriched}", file=sys.stderr)
             entries = load_from_enriched(str(auto_enriched))
         else:
             print("Error: Must specify --arxiv-ids, --from-enriched, or --from-recommendation", file=sys.stderr)
-            print(f"  Or ensure {temp_file_path('daily_papers_enriched.json')} exists", file=sys.stderr)
+            print(f"  Or ensure enriched JSON exists in /tmp/", file=sys.stderr)
             sys.exit(1)
 
     added = update_history(entries, args.date)

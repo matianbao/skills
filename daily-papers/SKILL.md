@@ -29,23 +29,30 @@ description: |
 
 ---
 
-## Step 1: 抓取 + 富化（纯脚本，零 token）
+## Step 1: 抓取 + 富化 + 过滤（纯脚本，零 token）
 
 ```bash
-# 默认当天
-python3 fetch_and_score.py 2>/dev/null > /tmp/daily_papers_top30.json
+# 默认当天（一条命令：fetch → enrich → filter）
+python3 pipeline.py 2>&1
 # 多天模式
-python3 fetch_and_score.py --days N 2>/dev/null > /tmp/daily_papers_top30.json
-
-# 富化（无参数，自动检测输入输出路径）
-python3 enrich_papers.py
+python3 pipeline.py --days N 2>&1
 ```
 
-验证 `/tmp/daily_papers_enriched.json` 存在且非空。失败则检查 stderr。
+脚本会输出三个文件：
+- `daily_papers_{date}_enriched.json`：完整数据，供 Step 3 笔记生成和历史更新使用
+- `daily_papers_{date}_filtered.json`：**精简数据（<10k token），供 Step 2 点评使用**
+- `daily_papers_{date}_top30.json`：原始打分数据
+
+验证 filtered JSON 存在且非空。失败则检查 stderr。
+
+**重要**：Step 2 只读 filtered JSON，不读 enriched JSON。enriched 留给 Step 3。
 
 ---
 
 ## Step 2: 毒舌点评 + 保存
+
+读取 Step 1 生成的 **filtered JSON**（`daily_papers_{date}_filtered.json`），不读 enriched JSON。
+filtered JSON 只包含标题、作者、机构、摘要（截断至400字）、链接、评分、来源、方法名（前8个）、方法摘要，体积 <10k token。
 
 ### 2a: 扫描笔记库
 
@@ -66,12 +73,6 @@ python3 enrich_papers.py
 
 不设硬性上限，从候选池按 score 降序选取，按相关性过滤掉不相关的。有多少相关的就推荐多少。
 
-#### 来源格式
-
-- `hf-daily` → `📰 HF Daily，⬆️ {hf_upvotes}`
-- `hf-trending` → `🔥 HF Trending，⬆️ {hf_upvotes}`
-- `arxiv` → `📄 arXiv 关键词检索`
-
 #### 铁律：基于事实评价
 
 **绝对禁止**：编造缺陷、用肯定语气说不确定的事。不确定就说"摘要未提及"。
@@ -82,61 +83,56 @@ python3 enrich_papers.py
 
 毒舌、尖锐、有态度。夸要具体，骂要更具体。不和稀泥。每条锐评末尾加 emoji 判决：🔥（强推）👀（值得看）⚠️（有硬伤）🫠（incremental）💀（灌水）🤡（标题党）💤（无聊）
 
-#### 输出结构
+#### 输出格式（JSON，非 markdown）
 
-**开头**：`# 🔪 今日锐评`（2-3 句总评）+ 分流表
+**性能优化**：LLM 只输出点评内容的 JSON，metadata（作者/机构/链接/来源/图片）由 `build_recommendation.py` 自动从 filtered JSON 填充。这比生成完整 markdown 快 ~40%。
 
-```markdown
-## 分流表
-| 等级 | 论文 |
-|------|------|
-| 🔥 必读 | [[方法名A]]（一句话理由）· [[方法名B]]（理由） |
-| 👀 值得看 | [[方法名C]]（理由） |
-| 💤 可跳过 | [[方法名D]]（理由） |
+用 Write 将点评写入 `/tmp/daily_papers_{date}_reviews.json`：
+
+```json
+{
+  "summary": "2-3句总评（毒舌风格）",
+  "triage": {
+    "must_read": ["[[方法名A]]（一句话理由）"],
+    "worth_reading": ["[[方法名B]]（理由）", "[[方法名C]]（理由）"],
+    "skip": ["[[方法名D]]（理由）"]
+  },
+  "reviews": [
+    {
+      "paper_index": 0,
+      "topic_group": "🤖 Agent 框架与安全",
+      "core_method": "3-5句，技术名词用 [[]] 双链，可参考 filtered JSON 的 method_summary",
+      "baselines": "具体方法名 + [[]] 双链",
+      "significance": "对用户关注领域有什么用",
+      "review": "锐评 2-5句 + emoji 判决（🔥👀⚠️🫠💀🤡💤）",
+      "show_read_hint": true
+    }
+  ],
+  "excluded": [
+    {"title": "论文标题", "reason": "跳过原因"}
+  ],
+  "trend": "一句话趋势判断"
+}
 ```
 
-分流表规则：wikilink 用方法名缩写（如 `[[UniMixer]]`），不用完整标题。
+字段规则：
+- `paper_index`：对应 filtered JSON 数组下标（从 0 开始）
+- `topic_group`：论文所属主题组（如 `🤖 Agent 框架`、`🧠 推理与记忆`、`📊 推荐系统`），同组论文在最终 markdown 中聚合显示
+- 已有笔记的论文：加 `"note_name": "NoteName"`，可省略 `core_method`/`baselines`/`significance`（只写 review 即可）
+- `show_read_hint`：设为 `true` 显示"💡 想精读？"提示（仅非已有笔记的论文）
+- 分流表 wikilink 用方法名缩写（如 `[[UniMixer]]`），不用完整标题
 
-**论文详评**：按主题分类。
+**不要在 JSON 中重复 metadata**：作者、机构、链接、来源、图片等全部由脚本自动填充。
 
-已有笔记的论文用精简格式：
-```markdown
-### N. 论文标题
-- **链接**: [arXiv](URL) | [PDF](URL)
-- **来源**: ...
-- 📒 **已有笔记**: [[note_name]]
+### 2c: 构建 + 保存
+
+```bash
+python3 build_recommendation.py --date YYYY-MM-DD
 ```
 
-无笔记的论文用完整格式：
-```markdown
-### N. 论文标题
-- **作者**: ...
-- **机构**: ...
-- **链接**: [arXiv](URL) | [PDF](URL)
-- **来源**: ...
+脚本自动合并 filtered JSON 的 metadata + reviews JSON 的点评，生成最终 markdown 到 `{DAILY_PAPERS_PATH}/YYYY-MM-DD-论文推荐.md`（含 frontmatter）。
 
-![](figure_url)
-
-- **核心方法**: 3-5 句（基于 method_summary，技术名词用 [[]] 双链）
-- **对比方法/Baselines**: 具体方法名 + [[]] 双链
-- **借鉴意义**: 对用户关注领域有什么用
-- **锐评**: 行不行？硬伤在哪？claim vs 证据？
-- 💡 **想精读？** 运行：`读一下 论文标题`  ← 仅"值得看"显示
-```
-
-**收尾**：被排除论文 + 一句话趋势判断。
-
-### 2c: 保存
-
-用 Write 保存到 `{DAILY_PAPERS_PATH}/YYYY-MM-DD-论文推荐.md`，开头加 frontmatter：
-
-```yaml
----
-date: YYYY-MM-DD
-keywords: <从 user-config.json 的 keywords 列表取前 8 个>
-tags: [daily-papers, auto-generated]
----
-```
+验证生成的文件存在且非空。如果构建失败，检查 reviews JSON 格式。
 
 ### 2d: 更新历史
 

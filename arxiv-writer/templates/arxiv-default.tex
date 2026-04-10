@@ -1,0 +1,110 @@
+% arXiv default template — clean, single-column, suitable for most CS submissions
+\documentclass[11pt]{article}
+
+% ── Geometry ──
+\usepackage[a4paper, margin=1in]{geometry}
+
+% ── Encoding & Fonts ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% ── Math ──
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+\usepackage{bm}  % bold math symbols
+
+% ── Graphics & Tables ──
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+
+% ── Colors & Links ──
+\usepackage[dvipsnames]{xcolor}
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue]{hyperref}
+
+% ── Algorithms ──
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% ── Citations ──
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+
+% ── Misc ──
+\usepackage{enumitem}
+\usepackage{microtype}
+
+% ── Custom Commands ──
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+\newcommand{\wrt}{w.r.t.}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+
+% ══════════════════════════════════════════════════════════════════════
+\title{\textbf{TITLE}}
+\author{
+  Author One\thanks{Equal contribution.} \\
+  Affiliation One \\
+  \texttt{author1@email.com}
+  \and
+  Author Two\footnotemark[1] \\
+  Affiliation Two \\
+  \texttt{author2@email.com}
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+% ── Abstract ──
+\begin{abstract}
+ABSTRACT\_PLACEHOLDER
+\end{abstract}
+
+% ── Introduction ──
+\section{Introduction}
+\label{sec:intro}
+
+\input{sections/introduction}
+
+% ── Related Work ──
+\section{Related Work}
+\label{sec:related}
+
+\input{sections/related_work}
+
+% ── Method ──
+\section{Method}
+\label{sec:method}
+
+\input{sections/method}
+
+% ── Experiments ──
+\section{Experiments}
+\label{sec:experiments}
+
+\input{sections/experiments}
+
+% ── Conclusion ──
+\section{Conclusion}
+\label{sec:conclusion}
+
+\input{sections/conclusion}
+
+% ── References ──
+\bibliography{references}
+
+% ── Appendix (optional) ──
+% \appendix
+% \section{Additional Results}
+% \label{app:additional}
+
+\end{document}

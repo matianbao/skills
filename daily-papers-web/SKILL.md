@@ -21,6 +21,7 @@ description: |
 - `WEB_ENABLED = web.enabled`（默认 true）
 - `GITHUB_PAGES_REPO = web.github_pages_repo`
 - `OUTPUT_DIR = web.output_dir`（默认 "daily-papers"）
+- `GITHUB_PAGES_URL = web.github_pages_url`（用于最终打开浏览器）
 
 ## 工作流程
 
@@ -28,7 +29,7 @@ description: |
 
 检查 `{DAILY_PAPERS_PATH}/` 下是否存在今天的推荐文件 `YYYY-MM-DD-论文推荐.md`。
 
-- 如果**不存在**：提示用户先运行 `今日论文推荐`，然后停止
+- 如果**不存在**：自动调用 `今日论文推荐` 完整流程（抓取→点评→保存→精读笔记），完成后继续 Step 1
 - 如果**已存在**：跳过，直接进入 Step 1
 
 ### Step 1: 生成静态站点
@@ -39,8 +40,11 @@ python3 ../daily-papers-web/generate_site.py
 
 脚本会：
 - 扫描 `{DAILY_PAPERS_PATH}/` 下所有 `*-论文推荐.md` 文件
-- 生成 `index.html`（首页，日期列表 + 摘要）
+- 增量构建：只重新生成源文件有修改的页面（用 `--force` 强制全量重建）
+- 生成 `index.html`（Dashboard 首页，懒加载详情）
 - 生成每日详情页 `YYYY-MM-DD.html`
+- 生成 `fragments/YYYY-MM-DD.html`（首页懒加载用的片段）
+- 拷贝 `style.css`、`dashboard.js`、`tabs.js` 到输出目录
 - 输出到 `{GITHUB_PAGES_REPO}/{OUTPUT_DIR}/`
 
 如果 `GITHUB_PAGES_REPO` 未配置，输出到 `{VAULT_PATH}/_site/`。
@@ -52,19 +56,25 @@ python3 ../daily-papers-web/generate_site.py
 ```bash
 cd {GITHUB_PAGES_REPO}
 git add {OUTPUT_DIR}/
-git commit -m "update daily papers: $(date +%Y-%m-%d)"
-git push
+git diff --cached --quiet && echo "No changes to commit" && exit 0
+git commit -m "update daily papers $(date +%Y-%m-%d): {rebuilt_count} pages rebuilt"
+git push || echo "Push failed. Please check your git credentials and try: cd {GITHUB_PAGES_REPO} && git push"
 ```
+
+注意：
+- 先检查是否有实际变更，无变更时跳过 commit
+- push 失败时给出明确提示而非静默失败
+- commit message 包含重建页数
 
 ### Step 3: 打开浏览器预览
 
-生成完成后，打开 GitHub Pages 地址：
+从配置中读取 `GITHUB_PAGES_URL`，如果配置了则打开：
 
 ```bash
-open https://matianbao.github.io/daily-papers-site/daily-papers/
+open {GITHUB_PAGES_URL}
 ```
 
-如果 `GITHUB_PAGES_REPO` 未配置，则打开本地文件：
+如果未配置 `GITHUB_PAGES_URL`，尝试从 `GITHUB_PAGES_REPO` 推断：
 
 ```bash
 open {OUTPUT_PATH}/index.html
@@ -72,11 +82,12 @@ open {OUTPUT_PATH}/index.html
 
 ### Step 4: 告知用户
 
-- 生成了多少天的页面
-- 如果推送成功，给出 GitHub Pages URL
+- 生成了多少天的页面（其中多少是增量更新、多少是缓存命中）
+- 如果推送成功，给出访问 URL
 
 ## 注意事项
 
 - 如果 `web.enabled` 为 false，跳过不执行
 - 如果 GitHub Pages 仓库未配置，只生成本地 HTML，不推送
 - 可以随时手动运行 `发布论文网页` 重新生成全部页面
+- 使用 `--force` 参数强制重建所有页面（忽略缓存）
