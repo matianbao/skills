@@ -324,6 +324,18 @@ def _section_emoji(title: str) -> str:
     return "\U0001f4c4"
 
 
+def _inject_papers_cool_btn(card_html: str) -> str:
+    """Add a papers.cool button to paper cards that contain arXiv links."""
+    m = re.search(r'href="https?://arxiv\.org/abs/([^"]+)"', card_html)
+    if m:
+        arxiv_id = m.group(1).rstrip('/')
+        btn = (f'<a class="papers-cool-btn" href="https://papers.cool/arxiv/{arxiv_id}" '
+               f'target="_blank" rel="noopener">📖 AI 精读</a>')
+        # Insert before closing </div>
+        card_html = card_html[:-6] + btn + '</div>'
+    return card_html
+
+
 def _section_to_cards(sec: dict, notes_map: dict = None) -> str:
     md_text = sec["md"]
     topic = html.escape(sec["title"])
@@ -334,7 +346,8 @@ def _section_to_cards(sec: dict, notes_map: dict = None) -> str:
         if not part:
             continue
         if part.startswith("###"):
-            result += f'<div class="paper-card" data-topic="{topic}">{md_to_html(part, notes_map)}</div>'
+            card = f'<div class="paper-card" data-topic="{topic}">{md_to_html(part, notes_map)}</div>'
+            result += _inject_papers_cool_btn(card)
         elif part.startswith("##"):
             result += md_to_html(part, notes_map)
     return result

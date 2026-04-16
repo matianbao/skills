@@ -316,6 +316,7 @@ def build_report(d):
 
 def main():
     cron_mode = '--cron' in sys.argv
+    no_push = '--no-push' in sys.argv
     print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 美股复盘脚本启动 ({'定时模式' if cron_mode else '交互模式'})")
 
     # 美股周末休市（周六=5，周日=6）
@@ -334,8 +335,11 @@ def main():
     report = build_report(data)
     print(report)
 
-    print("\n[3/3] 推送到钉钉...")
-    send_dingtalk(f"美股复盘 {data['date']}", report)
+    if no_push:
+        print("\n[SKIP] --no-push 模式，跳过钉钉推送")
+    else:
+        print("\n[3/3] 推送到钉钉...")
+        send_dingtalk(f"美股复盘 {data['date']}", report)
     print("[DONE] 完成")
 
 
