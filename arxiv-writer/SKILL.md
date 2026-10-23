@@ -310,7 +310,7 @@ Abstract 应包含以下 5 个要素，每个 1-2 句话（总计 150-250 词）
 
 ---
 
-## Step 2.5: 生成图示（Phase 1 内）— JSON → TikZ 自动生成
+## Step 2.5: 生成图示（Phase 1 内）— fireworks-tech-graph SVG → PNG
 
 Method section 写完后，**至少**生成以下两张图：
 
@@ -319,67 +319,69 @@ Method section 写完后，**至少**生成以下两张图：
 
 此外，根据论文内容自适应判断是否需要可选图（动机图、实验分析图、对比图等）。
 
-### 图生成方式：JSON 描述 → tikz_generator.py → TikZ 代码
+### 图生成方式：调用 fireworks-tech-graph skill 生成 SVG + PNG
 
-**不要直接手写 TikZ 代码。** 生成结构化 JSON 描述文件，由脚本自动计算坐标、碰撞检测、输出 TikZ。
+**不要手写 TikZ 或直接写 SVG。** 调用 `/fireworks-tech-graph` skill 生成高质量技术图，输出 SVG 和 PNG。
 
-#### 1. 生成 JSON 图描述文件
+#### 1. 准备图描述
 
-将每张图写为 `figures/<name>.json`，格式参考 `scripts/tikz_schema.json`。核心字段：
+为每张图准备清晰的自然语言描述，包含：
+- 所有模块/组件名称（必须与 Method 子节标题一致）
+- 模块之间的数据流、控制流、连接关系
+- 需要标注的维度信息（如 $\mathbb{R}^{n \times d}$）
+- 分阶段/分组信息（如 Stage 1: Encoding, Stage 2: Decoding）
 
-```json
-{
-  "caption": "图的 LaTeX caption",
-  "label": "fig:framework",
-  "double_column": true,
-  "scale": 0.75,
-  "nodes": [
-    {"id": "input", "label": "Input Embedding", "type": "input", "group": "stage1", "row": 0, "col": 1, "col_span": 3, "dim": "$\\R^{d}$"}
-  ],
-  "edges": [
-    {"from": "input", "to": "encoder"},
-    {"from": "encoder", "to": ["head1", "head2"], "style": "fork"},
-    {"from": "skip", "to": "output", "style": "residual"}
-  ],
-  "groups": [
-    {"id": "stage1", "label": "Stage 1: Encoding"}
-  ]
-}
+#### 2. 调用 skill 生成图
+
+对每张图，调用 `/fireworks-tech-graph` skill，指定：
+- 图表类型（Architecture Diagram / Data Flow / Flowchart 等）
+- 视觉风格（默认 Style 4: Notion Clean，适合学术论文；或 Style 1: Flat Icon）
+- 输出路径：`figures/framework.svg` / `figures/network.svg` 等
+
+```
+/fireworks-tech-graph
+类型：Architecture Diagram
+风格：Style 4 (Notion Clean)
+输出：figures/framework
+描述：[方法的完整 pipeline 描述，包含所有模块名称和数据流]
 ```
 
-**节点类型**（决定默认填充色和宽度）：`input` / `encoder` / `core` / `output` / `loss` / `prediction` / `frozen` / `gate` / `norm` / `pool` / `concat` / `module`
-
-**边样式**：`default`（实线箭头）/ `fork`（一对多）/ `residual`（虚线跳连）/ `dashed`（信号线）/ `signal`（红色虚线）
-
-**关键规则**：
-- `row`/`col` 是逻辑网格坐标（0 起始），不是像素坐标
-- `col_span` 用于跨多列的宽节点（如 Input Embedding）
-- `dim` 是维度标注文本，`dim_pos` 控制标注位置（above/below/left/right）
-- `group` 对应 `groups` 中的 `id`，用于自动生成 dashed stage box
-
-#### 2. 运行生成器
-
-```bash
-python3 scripts/tikz_generator.py figures/framework.json -o figures/framework.tex
-python3 scripts/tikz_generator.py figures/network.json -o figures/network.tex
-```
-
-脚本自动：
-- 将逻辑 row/col 转换为物理坐标
-- 检测节点碰撞并自动调整间距
-- 检测边与节点的交叉并发出警告
-- 生成规范的 TikZ 代码（三级字号、命名 dim 节点、fit 列表包含 dim）
+Skill 会自动：
+- 根据描述生成结构化 SVG
+- 通过 `rsvg-convert` 验证 SVG 语法
+- 导出 1920px 宽 PNG（2x retina）
 
 #### 3. 嵌入论文
 
-在 Method section 中用 `\input{figures/framework}` 引入。
+在 Method section 中用 `\includegraphics` 引入 PNG：
+
+```latex
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/framework.png}
+\caption{Overview of the proposed framework.}
+\label{fig:framework}
+\end{figure}
+```
+
+双栏跨栏图使用 `figure*` 环境：
+
+```latex
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/framework.png}
+\caption{Overall architecture of \ours{}.}
+\label{fig:framework}
+\end{figure*}
+```
 
 #### 信息完整性检查（仍需人工判断）
 
 - [ ] 图中展示的模块与 Method 正文描述一致
 - [ ] 图中的数学符号与正文一致
 - [ ] 有完整的 caption 和 label
-- [ ] 编译通过，图在页面内完整显示
+- [ ] PNG 文件存在且在 PDF 中完整显示
+- [ ] SVG 已通过 rsvg-convert 验证
 
 ---
 
@@ -493,8 +495,8 @@ cd <paper-dir> && bash compile.sh
 - [ ] Method Overview 子节是否存在且概述了所有模块
 - [ ] 所有公式变量是否已定义（含维度标注）
 - [ ] 所有图表是否在正文中被引用
-- [ ] **整体框架图**已通过 JSON → tikz_generator.py 生成，编译通过
-- [ ] **网络结构图**已通过 JSON → tikz_generator.py 生成，编译通过
+- [ ] **整体框架图**已通过 fireworks-tech-graph 生成 SVG+PNG，rsvg-convert 验证通过
+- [ ] **网络结构图**已通过 fireworks-tech-graph 生成 SVG+PNG，rsvg-convert 验证通过
 - [ ] 可选图（动机图等）已根据需求判断是否生成
 - [ ] 结果表中 baselines 是否按技术路线分层列出
 - [ ] Ablation 行数是否 ≥ 方法组件数
@@ -523,19 +525,13 @@ Phase 1 质量自检通过后，自动启动 Phase 2。
 
 ## 生成方式
 
-同 Step 2.5，使用 JSON → tikz_generator.py → TikZ 流程：
+同 Step 2.5，调用 `/fireworks-tech-graph` skill 生成 SVG + PNG：
 
-1. 生成 `figures/motivation.json`（描述问题两面对比、关键数字等）
-2. 运行 `python3 scripts/tikz_generator.py figures/motivation.json -o figures/motivation.tex`
-3. 在 Introduction 中 `\input{figures/motivation}`
-4. 编译验证
-
-## TikZ 编码注意事项（仅在需要手动微调生成代码时参考）
-
-- 不使用 `\resizebox{\textwidth}{!}`：与 TikZ 节点内 `\\` 换行冲突，用 `scale=0.9, every node/.style={scale=0.9}`
-- 所有使用 `\\` 换行的 TikZ 节点样式必须包含 `align=center`
-- 注释中避免 Unicode 字符
-- 使用 `$\times$` 而非 `\texttimes`
+1. 准备图描述（如问题两面对比、关键数字、现有方法 vs 本文方法等）
+2. 调用 `/fireworks-tech-graph`，指定类型和风格（默认 Style 4: Notion Clean）
+3. 输出到 `figures/motivation.svg` + `figures/motivation.png`
+4. 在 Introduction 中用 `\includegraphics{figures/motivation.png}` 引入
+5. 编译验证
 
 Phase 2 完成后直接进入 Phase 3。
 
@@ -676,4 +672,4 @@ Phase 4 完成后，自动启动 Phase 5，执行全部 P0 + P1 + P2 修改。
 - 不要虚构引用——Phase 3 会核实所有引用，但生成时也应尽量使用确信存在的论文
 - Related Work 中对他人工作的描述要客观公正
 - 如果用户提供的信息不足以写某个 section，明确告知缺什么，而不是瞎编
-- TikZ 图（包括整体框架图、网络结构图和可选的 motivation figure）都必须通过自检流程才能交付
+- 所有图（整体框架图、网络结构图和可选的 motivation figure）都必须通过 fireworks-tech-graph 生成并经 rsvg-convert 验证后才能交付
